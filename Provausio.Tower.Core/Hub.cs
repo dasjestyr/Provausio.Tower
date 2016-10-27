@@ -17,7 +17,6 @@ namespace Provausio.Tower.Core
         private readonly HttpClient _httpClient;
 
         private bool _isDisposed;
-        
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Hub"/> class.
@@ -30,7 +29,7 @@ namespace Provausio.Tower.Core
         public Hub(
             ISubscriptionStore subscriptionStore, 
             IChallengeGenerator challengeGenerator, 
-            HttpMessageHandler messageHandler = null)
+            HttpMessageHandler messageHandler)
         {
             if(subscriptionStore == null)
                 throw new ArgumentNullException(nameof(subscriptionStore));
@@ -43,6 +42,16 @@ namespace Provausio.Tower.Core
             _httpClient = messageHandler == null
                 ? new HttpClient()
                 : new HttpClient(messageHandler);
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Hub"/> class.
+        /// </summary>
+        /// <param name="subscriptionStore">The subscription store.</param>
+        /// <param name="challengeGenerator">The challenge generator.</param>
+        public Hub(ISubscriptionStore subscriptionStore, IChallengeGenerator challengeGenerator)
+            : this(subscriptionStore, challengeGenerator, null)
+        {
         }
 
         public async Task<SubscriptionResult> Subscribe(
@@ -76,6 +85,7 @@ namespace Provausio.Tower.Core
 
             var notifyTasks = subscriberList.Select(sub => Notify(sub, payload));
 
+            // TODO: notify if timeout
             await Task.WhenAll(notifyTasks);
         }
 
