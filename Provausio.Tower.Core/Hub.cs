@@ -108,7 +108,7 @@ namespace Provausio.Tower.Core
             }
 
             var challengeResponse = await response.Content.ReadAsStringAsync();
-            
+            challengeResponse = challengeResponse.Trim('"');
 
             if (challengeResponse.Equals(challenge))
             {
