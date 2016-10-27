@@ -17,18 +17,21 @@ namespace Provausio.Tower.Core
         private readonly HttpClient _httpClient;
 
         private bool _isDisposed;
+        private readonly NotificationService _notificationService;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Hub"/> class.
         /// </summary>
         /// <param name="subscriptionStore">The subscription store.</param>
         /// <param name="challengeGenerator">The challenge generator.</param>
+        /// <param name="queue"></param>
         /// <param name="messageHandler">The message handler.</param>
         /// <exception cref="ArgumentNullException">
         /// </exception>
         public Hub(
             ISubscriptionStore subscriptionStore, 
             IChallengeGenerator challengeGenerator, 
+            IPublishQueue queue,
             HttpMessageHandler messageHandler)
         {
             if(subscriptionStore == null)
@@ -36,12 +39,30 @@ namespace Provausio.Tower.Core
 
             if(challengeGenerator == null)
                 throw new ArgumentNullException(nameof(challengeGenerator));
-
+            
             _subscriptionStore = subscriptionStore;
             _challengeGenerator = challengeGenerator;
+            _notificationService = new NotificationService(this, queue ?? new InMemoryPublishQueue());
+
             _httpClient = messageHandler == null
                 ? new HttpClient()
                 : new HttpClient(messageHandler);
+
+            _notificationService.Start();
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Hub" /> class.
+        /// </summary>
+        /// <param name="subscriptionStore">The subscription store.</param>
+        /// <param name="challengeGenerator">The challenge generator.</param>
+        /// <param name="queue">The queue.</param>
+        public Hub(
+            ISubscriptionStore subscriptionStore, 
+            IChallengeGenerator challengeGenerator,
+            IPublishQueue queue)
+            : this(subscriptionStore, challengeGenerator, queue, null)
+        {
         }
 
         /// <summary>
@@ -49,8 +70,10 @@ namespace Provausio.Tower.Core
         /// </summary>
         /// <param name="subscriptionStore">The subscription store.</param>
         /// <param name="challengeGenerator">The challenge generator.</param>
-        public Hub(ISubscriptionStore subscriptionStore, IChallengeGenerator challengeGenerator)
-            : this(subscriptionStore, challengeGenerator, null)
+        public Hub(
+            ISubscriptionStore subscriptionStore,
+            IChallengeGenerator challengeGenerator)
+            : this(subscriptionStore, challengeGenerator, null, null)
         {
         }
 
@@ -79,25 +102,35 @@ namespace Provausio.Tower.Core
         }
 
         /// <summary>
-        /// Notifies all subscribers of an event
+        /// Queues a task that notifies all subscribers of an event
         /// </summary>
-        /// <param name="topicId">The topic identifier.</param>
+        /// <param name="topic">The topic identifier.</param>
         /// <param name="payload">The payload that will be sent to subscribers.</param>
         /// <returns></returns>
         /// <exception cref="ArgumentNullException">Can't notify a subscriber without any info!</exception>
-        public async Task Publish(object topicId, HttpContent payload)
+        public void Publish(string topic, HttpContent payload)
         {
             CheckDispose();
 
             if(payload == null)
                 throw new ArgumentNullException(nameof(payload), "Can't notify a subscriber without any info!");
 
-            var subscriptions = await _subscriptionStore.GetSubscriptions(topicId);
+            _notificationService.Enqueue(new Publication(topic, payload));
+        }
+
+        /// <summary>
+        /// Executes the notification task
+        /// </summary>
+        /// <param name="publication">The publication.</param>
+        /// <returns></returns>
+        internal async Task Publish(Publication publication)
+        {
+            var subscriptions = await _subscriptionStore.GetSubscriptions(publication.Topic);
             var subscriberList = subscriptions.ToList();
             if (!subscriberList.Any())
                 return;
 
-            var notifyTasks = subscriberList.Select(sub => Notify(sub, payload));
+            var notifyTasks = subscriberList.Select(sub => Notify(sub, publication.Payload));
 
             // TODO: notify if timeout
             await Task.WhenAll(notifyTasks);
@@ -226,6 +259,7 @@ namespace Provausio.Tower.Core
             if (!disposing)
                 return;
 
+            _notificationService.Stop();
             _httpClient.Dispose();
             _isDisposed = true;
         }
@@ -244,35 +278,5 @@ namespace Provausio.Tower.Core
         public event PublishNotificationFailureHandler PublishNotificationFailed;
     }
 
-    public delegate void PublishNotificationFailureHandler(object sender, EventArgs e);
-
-    public class PublishNotificationFailureEventArgs : EventArgs
-    {
-        /// <summary>
-        /// Gets or sets the failed subscription.
-        /// </summary>
-        /// <value>
-        /// The failed subscription.
-        /// </value>
-        public Subscription FailedSubscription { get; set; }
-
-        /// <summary>
-        /// Gets or sets the message.
-        /// </summary>
-        /// <value>
-        /// The message.
-        /// </value>
-        public string Message { get; set; }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PublishNotificationFailureEventArgs"/> class.
-        /// </summary>
-        /// <param name="failedSubscription">The failed subscription.</param>
-        /// <param name="message">The message.</param>
-        public PublishNotificationFailureEventArgs(Subscription failedSubscription, string message)
-        {
-            FailedSubscription = failedSubscription;
-            Message = message;
-        }
-    }
+    public delegate void PublishNotificationFailureHandler(object sender, PublishNotificationFailureEventArgs e);
 }
