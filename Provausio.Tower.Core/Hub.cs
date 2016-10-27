@@ -1,10 +1,11 @@
 ﻿using System;
+using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace Provausio.Tower.Core
 {
-    public class Hub : IPubSubHub
+    public class Hub : IPubSubHub, IDisposable
     {
         private const string VerifyTokenProperty = "hub.verify_token";
         private const string ModeProperty = "hub.mode";
@@ -13,7 +14,9 @@ namespace Provausio.Tower.Core
 
         private readonly ISubscriptionStore _subscriptionStore;
         private readonly IChallengeGenerator _challengeGenerator;
-        private readonly HttpMessageHandler _messageHandler;
+        private readonly HttpClient _httpClient;
+
+        private bool _isDisposed;
         
 
         /// <summary>
@@ -37,7 +40,9 @@ namespace Provausio.Tower.Core
 
             _subscriptionStore = subscriptionStore;
             _challengeGenerator = challengeGenerator;
-            _messageHandler = messageHandler;
+            _httpClient = messageHandler == null
+                ? new HttpClient()
+                : new HttpClient(messageHandler);
         }
 
         public async Task<SubscriptionResult> Subscribe(
@@ -45,6 +50,7 @@ namespace Provausio.Tower.Core
             Uri callback, 
             string verifyToken)
         {
+            CheckDispose();
             var result = await VerifyCallback(topic, callback, verifyToken);
 
             if (!result.SubscriptionSucceeded)
@@ -54,6 +60,55 @@ namespace Provausio.Tower.Core
             await _subscriptionStore.Subscribe(subscription);
 
             return result;
+        }
+
+        public async Task Publish(object topicId, HttpContent payload)
+        {
+            CheckDispose();
+
+            if(payload == null)
+                throw new ArgumentNullException(nameof(payload), "Can't notify a subscriber without any info!");
+
+            var subscriptions = await _subscriptionStore.GetSubscriptions(topicId);
+            var subscriberList = subscriptions.ToList();
+            if (!subscriberList.Any())
+                return;
+
+            var notifyTasks = subscriberList.Select(sub => Notify(sub, payload));
+
+            await Task.WhenAll(notifyTasks);
+        }
+
+        private async Task Notify(Subscription subscription, HttpContent content)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, subscription.Callback) {Content = content};
+
+            try
+            {
+                var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var message = "The subscriber's endpoint did not return a success code.";
+                    if (response.Content != null)
+                        message = $"{(int)response.StatusCode}:{await response.Content.ReadAsStringAsync()}";
+
+                    var args = new PublishNotificationFailureEventArgs(subscription, message);
+                    OnNotifyFailed(args);
+                }
+            }
+            catch (AggregateException ex)
+            {
+                var exMessage = ex.InnerExceptions[0];
+                var message = $"Notification failed do to an exception. {exMessage.Message}";
+                var args = new PublishNotificationFailureEventArgs(subscription, message);
+                OnNotifyFailed(args);
+            }
+            catch(Exception ex)
+            {
+                var message = $"Notification failed do to an exception. {ex.Message}";
+                var args = new PublishNotificationFailureEventArgs(subscription, message);
+                OnNotifyFailed(args);
+            }
         }
 
         private async Task<SubscriptionResult> VerifyCallback(
@@ -70,12 +125,8 @@ namespace Provausio.Tower.Core
             var validationUrl = GetValidationUri(topic, callback, verifyToken, challenge, "subscribe");
 
             // call the callback 
-            var client = _messageHandler == null
-                ? new HttpClient()
-                : new HttpClient(_messageHandler);
-
             var request = new HttpRequestMessage(HttpMethod.Get, validationUrl);
-            var response = await client.SendAsync(request);
+            var response = await _httpClient.SendAsync(request);
 
             return await VerifyDetails(response, challenge);
         }
@@ -138,6 +189,66 @@ namespace Provausio.Tower.Core
                 : newQuery;
 
             return uriBuilder.Uri;
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        private void Dispose(bool disposing)
+        {
+            if (!disposing)
+                return;
+
+            _httpClient.Dispose();
+            _isDisposed = true;
+        }
+
+        private void CheckDispose()
+        {
+            if(_isDisposed)
+                throw new ObjectDisposedException("Hub");
+        }
+
+        private void OnNotifyFailed(PublishNotificationFailureEventArgs args)
+        {
+            PublishNotificationFailed?.Invoke(this, args);
+        }
+
+        public event PublishNotificationFailureHandler PublishNotificationFailed;
+    }
+
+    public delegate void PublishNotificationFailureHandler(object sender, EventArgs e);
+
+    public class PublishNotificationFailureEventArgs : EventArgs
+    {
+        /// <summary>
+        /// Gets or sets the failed subscription.
+        /// </summary>
+        /// <value>
+        /// The failed subscription.
+        /// </value>
+        public Subscription FailedSubscription { get; set; }
+
+        /// <summary>
+        /// Gets or sets the message.
+        /// </summary>
+        /// <value>
+        /// The message.
+        /// </value>
+        public string Message { get; set; }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PublishNotificationFailureEventArgs"/> class.
+        /// </summary>
+        /// <param name="failedSubscription">The failed subscription.</param>
+        /// <param name="message">The message.</param>
+        public PublishNotificationFailureEventArgs(Subscription failedSubscription, string message)
+        {
+            FailedSubscription = failedSubscription;
+            Message = message;
         }
     }
 }
