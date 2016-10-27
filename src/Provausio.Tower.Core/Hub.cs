@@ -54,6 +54,13 @@ namespace Provausio.Tower.Core
         {
         }
 
+        /// <summary>
+        /// Subscribes the callback to the specified topic.
+        /// </summary>
+        /// <param name="topic">The topic.</param>
+        /// <param name="callback">The callback.</param>
+        /// <param name="verifyToken">The verify token.</param>
+        /// <returns></returns>
         public async Task<SubscriptionResult> Subscribe(
             string topic, 
             Uri callback, 
@@ -71,6 +78,13 @@ namespace Provausio.Tower.Core
             return result;
         }
 
+        /// <summary>
+        /// Notifies all subscribers of an event
+        /// </summary>
+        /// <param name="topicId">The topic identifier.</param>
+        /// <param name="payload">The payload that will be sent to subscribers.</param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentNullException">Can't notify a subscriber without any info!</exception>
         public async Task Publish(object topicId, HttpContent payload)
         {
             CheckDispose();

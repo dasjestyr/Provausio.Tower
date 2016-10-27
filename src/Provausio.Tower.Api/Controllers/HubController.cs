@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Specialized;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Formatting;
@@ -20,15 +19,18 @@ namespace Provausio.Tower.Api.Controllers
         }
 
         [Route("subscribe"), HttpPost]
-        public async Task<HttpResponseMessage> Subscribe(FormDataCollection data)
+        public async Task<HttpResponseMessage> Subscribe(FormDataCollection form)
         {
-            var callback = data["hub.callback"];
-            var mode = data["hub.mode"];
-            var topic = data["hub.topic"];
-            var token = data["hub.verify_token"];
+            if (form == null)
+                return Request.CreateResponse(HttpStatusCode.BadRequest, "no parameters were provided.");
 
-            if (string.IsNullOrEmpty(callback) || string.IsNullOrEmpty(mode) || string.IsNullOrEmpty(topic) || string.IsNullOrEmpty(token) || !mode.Equals("subscribe"))
-                return Request.CreateResponse(HttpStatusCode.BadRequest);
+            var topic = form.Get("hub.topic");
+            var callback = form.Get("hub.callback");
+            var token = form.Get("hub.verify_token");
+            var mode = form.Get("hub.mode");
+
+            if(string.IsNullOrEmpty(topic) || string.IsNullOrEmpty(callback) || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(mode))
+                return Request.CreateResponse(HttpStatusCode.BadRequest, "invalid parameters");
 
             try
             {
@@ -43,9 +45,22 @@ namespace Provausio.Tower.Api.Controllers
             {
                 return Request.CreateResponse(HttpStatusCode.InternalServerError, ex.Message);
             }
-            
+        }
 
-            return null;
+        [Route("publish"), HttpPost]
+        public async Task<HttpResponseMessage> Publish(object topicId)
+        {
+            var content = Request.Content;
+            if (topicId == null)
+                return Request.CreateResponse(HttpStatusCode.BadRequest, "topic id");
+
+            if (content == null)
+                return Request.CreateResponse(HttpStatusCode.BadRequest, "content");
+
+            // TODO: need a queue...
+            await _hub.Publish(topicId, content);
+
+            return Request.CreateResponse(HttpStatusCode.Accepted);
         }
     }
 }
