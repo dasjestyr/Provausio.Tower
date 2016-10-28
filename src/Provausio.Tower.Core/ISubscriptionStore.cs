@@ -8,9 +8,9 @@ namespace Provausio.Tower.Core
         /// <summary>
         /// Gets all subscriptions for the specified event
         /// </summary>
-        /// <param name="topicId">The event identifier.</param>
+        /// <param name="topic">The topic.</param>
         /// <returns></returns>
-        Task<IEnumerable<Subscription>> GetSubscriptions(object topicId);
+        Task<IEnumerable<Subscription>> GetSubscriptions(string topic);
 
         /// <summary>
         /// Subscribes the specified callback URLs to the specified event

@@ -15,13 +15,14 @@ namespace Provausio.tower.Core.Tests
         private readonly Mock<IChallengeGenerator> _challengeGenerator;
         private readonly Mock<ISubscriptionStore> _subscriptionStore;
         private readonly Uri _testUri;
+        private readonly Mock<IPublishQueue> _queue;
 
         public HubTests()
         {
             _testUri = new Uri("http://my.testapi.com/api");
             _challengeGenerator = new Mock<IChallengeGenerator>();
             _challengeGenerator.Setup(m => m.GetChallenge(It.IsAny<object>())).Returns(ChallengeValue);
-
+            _queue = new Mock<IPublishQueue>();
             _subscriptionStore = new Mock<ISubscriptionStore>();
         }
 
@@ -65,7 +66,7 @@ namespace Provausio.tower.Core.Tests
             // arrange
             
             var handler = new FakeHandler(HttpStatusCode.NotFound, null);
-            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, handler);
+            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
             var result = await hub.Subscribe("my topic", _testUri, "myToken");
@@ -80,7 +81,7 @@ namespace Provausio.tower.Core.Tests
             // arrange
             var subscriberChallengeReply = "bar"; // server sends "foo"
             var handler = new FakeHandler(HttpStatusCode.OK, subscriberChallengeReply);
-            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, handler);
+            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
             var result = await hub.Subscribe("my topic", _testUri, "baz");
@@ -94,7 +95,7 @@ namespace Provausio.tower.Core.Tests
         {
             // arrange
             var handler = new FakeHandler(HttpStatusCode.OK, null);
-            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, handler);
+            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
             var result = await hub.Subscribe("my topic", _testUri, "baz");
@@ -111,7 +112,7 @@ namespace Provausio.tower.Core.Tests
             store.Setup(m => m.Subscribe(It.IsAny<Subscription>()));
              
             var handler = new FakeHandler(HttpStatusCode.OK, null);
-            var hub = new Hub(store.Object, _challengeGenerator.Object, handler);
+            var hub = new Hub(store.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
             var result = await hub.Subscribe("my topic", _testUri, "baz");
@@ -125,7 +126,7 @@ namespace Provausio.tower.Core.Tests
         {
             // arrange
             var handler = new FakeHandler(HttpStatusCode.OK, ChallengeValue);
-            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, handler);
+            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
             var result = await hub.Subscribe("my topic", _testUri, "verifyToken");
@@ -144,7 +145,7 @@ namespace Provausio.tower.Core.Tests
                 .Returns(Task.FromResult(It.IsAny<SubscriptionResult>()));
 
             var handler = new FakeHandler(HttpStatusCode.OK, ChallengeValue);
-            var hub = new Hub(subStore.Object, _challengeGenerator.Object, handler);
+            var hub = new Hub(subStore.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
             var result = await hub.Subscribe("my topic", _testUri, "verifyToken");

@@ -48,17 +48,17 @@ namespace Provausio.Tower.Api.Controllers
         }
 
         [Route("publish"), HttpPost]
-        public async Task<HttpResponseMessage> Publish(object topicId)
+        public async Task<HttpResponseMessage> Publish(string topic)
         {
             var content = Request.Content;
-            if (topicId == null)
+            if (topic == null)
                 return Request.CreateResponse(HttpStatusCode.BadRequest, "topic id");
 
             if (content == null)
                 return Request.CreateResponse(HttpStatusCode.BadRequest, "content");
 
             // TODO: need a queue...
-            await _hub.Publish(topicId, content);
+            _hub.Publish(topic, content);
 
             return Request.CreateResponse(HttpStatusCode.Accepted);
         }

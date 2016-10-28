@@ -7,7 +7,7 @@ namespace Provausio.Tower.Api.Data
 {
     public class SubscriptionStore : ISubscriptionStore
     {
-        public Task<IEnumerable<Subscription>> GetSubscriptions(object topicId)
+        public Task<IEnumerable<Subscription>> GetSubscriptions(string topic)
         {
             throw new NotImplementedException();
         }
