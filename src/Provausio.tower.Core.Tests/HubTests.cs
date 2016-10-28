@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -126,7 +127,11 @@ namespace Provausio.tower.Core.Tests
         {
             // arrange
             var handler = new FakeHandler(HttpStatusCode.OK, ChallengeValue);
-            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
+            var hub = new Hub(
+                _subscriptionStore.Object,
+                _challengeGenerator.Object, 
+                _queue.Object, 
+                handler);
 
             // act
             var result = await hub.Subscribe("my topic", _testUri, "verifyToken");
@@ -153,12 +158,166 @@ namespace Provausio.tower.Core.Tests
             // assert
             subStore.Verify(m => m.Subscribe(It.IsAny<Subscription>()), Times.Once);
         }
+
+        [Fact]
+        public void Publish_NullTopic_Throws()
+        {
+            // arrange
+            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object);
+
+            // act
+
+            // assert
+            Assert.Throws<ArgumentNullException>(() => hub.Publish(null, new StringContent("test payload")));
+        }
+
+        [Fact]
+        public void Publish_NullContent_Throws()
+        {
+            // arrange
+            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object);
+
+            // act
+
+            // assert
+            Assert.Throws<ArgumentNullException>(() => hub.Publish("foo", null));
+        }
+
+        [Fact]
+        public void Publish_AddsToQueue()
+        {
+            // arrange
+            var queue = new Mock<IPublishQueue>();
+            queue.Setup(m => m.Enqueue(It.IsAny<Publication>()));
+            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, queue.Object);
+
+            // act
+            hub.Publish("foo", new StringContent("test payload"));
+
+            // assert
+            queue.Verify(m => m.Enqueue(It.IsAny<Publication>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task PublishDirect_10Subscribers_NotifiesAll()
+        {
+            // arrange
+            _subscriptionStore
+                .Setup(m => m.GetSubscriptions(It.IsAny<string>()))
+                .ReturnsAsync(GetSubs(10));
+
+            var handler = new FakeHandler(HttpStatusCode.OK, "test");
+
+            var hub = new Hub(
+                _subscriptionStore.Object, 
+                _challengeGenerator.Object, 
+                _queue.Object, 
+                handler);
+
+            // act
+            await hub.PublishDirect(new Publication("foo", new StringContent("test payload")));
+            await Task.Delay(500);
+
+            // assert
+            Assert.Equal(10, handler.Count);
+        }
+
+        [Fact]
+        public async Task PublishDirect_NoSubscribers_NoHttpCallsMade()
+        {
+            // arrange
+            _subscriptionStore
+                .Setup(m => m.GetSubscriptions(It.IsAny<string>()))
+                .ReturnsAsync(GetSubs(0));
+
+            var handler = new FakeHandler(HttpStatusCode.OK, "test");
+
+            var hub = new Hub(
+                _subscriptionStore.Object,
+                _challengeGenerator.Object,
+                _queue.Object,
+                handler);
+
+            // act
+            await hub.PublishDirect(new Publication("foo", new StringContent("test payload")));
+            await Task.Delay(500);
+
+            // assert
+            Assert.Equal(0, handler.Count);
+        }
+
+        [Fact]
+        public async Task PublishDirect_FailedNotify_TriggersEvent()
+        {
+            // arrange
+            _subscriptionStore
+                .Setup(m => m.GetSubscriptions(It.IsAny<string>()))
+                .ReturnsAsync(GetSubs(2));
+
+            var handler = new FakeHandler(HttpStatusCode.NotFound, "test failure");
+
+            var hub = new Hub(
+                _subscriptionStore.Object,
+                _challengeGenerator.Object,
+                _queue.Object,
+                handler);
+
+            var failCount = 0;
+            hub.PublishNotificationFailed += (o, s) => failCount++;
+
+            // act
+            await hub.PublishDirect(new Publication("foo", new StringContent("test payload")));
+            await Task.Delay(500);
+
+            // assert
+            Assert.Equal(2, failCount);
+        }
+
+        [Fact]
+        public async Task Publish_WhileDisposed_Throws()
+        {
+            // arrange
+            _subscriptionStore
+                .Setup(m => m.GetSubscriptions(It.IsAny<string>()))
+                .ReturnsAsync(GetSubs(10));
+
+            var handler = new FakeHandler(HttpStatusCode.OK, "test");
+
+            var hub = new Hub(
+                _subscriptionStore.Object,
+                _challengeGenerator.Object,
+                _queue.Object,
+                handler);
+
+            hub.Dispose();
+
+            // act
+            
+            // assert
+            await
+                Assert.ThrowsAsync<ObjectDisposedException>(
+                    () => hub.PublishDirect(new Publication("foo", new StringContent("test payload"))));
+        }
+
+        private static IEnumerable<Subscription> GetSubs(int count)
+        {
+            var subs = new List<Subscription>();
+            
+            for (var i = 0; i < count; i++)
+            {
+                subs.Add(new Subscription("foo", new Uri($"http://someplace.com/api/{i}")));
+            }
+
+            return subs;
+        }
     }
 
     internal class FakeHandler : HttpMessageHandler
     {
         private readonly HttpStatusCode _code;
         private readonly string _content;
+
+        public int Count { get; set; }
 
         public FakeHandler(HttpStatusCode code, string content)
         {
@@ -172,6 +331,7 @@ namespace Provausio.tower.Core.Tests
             if(!string.IsNullOrEmpty(_content))
                 response.Content = new StringContent(_content);
 
+            Count++;
             return Task.FromResult(response);
         }
     }

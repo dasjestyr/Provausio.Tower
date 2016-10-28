@@ -112,6 +112,9 @@ namespace Provausio.Tower.Core
         {
             CheckDispose();
 
+            if(string.IsNullOrEmpty(topic))
+                throw new ArgumentNullException(nameof(topic));
+
             if(payload == null)
                 throw new ArgumentNullException(nameof(payload), "Can't notify a subscriber without any info!");
 
@@ -125,6 +128,7 @@ namespace Provausio.Tower.Core
         /// <returns></returns>
         public async Task PublishDirect(Publication publication)
         {
+            CheckDispose();
             var subscriptions = await _subscriptionStore.GetSubscriptions(publication.Topic);
             var subscriberList = subscriptions.ToList();
             if (!subscriberList.Any())
@@ -139,30 +143,14 @@ namespace Provausio.Tower.Core
         private async Task Notify(Subscription subscription, HttpContent content)
         {
             var request = new HttpRequestMessage(HttpMethod.Post, subscription.Callback) {Content = content};
+            
+            var response = await _httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = "The subscriber's endpoint did not return a success code.";
+                if (response.Content != null)
+                    message = $"{(int)response.StatusCode}:{await response.Content.ReadAsStringAsync()}";
 
-            try
-            {
-                var response = await _httpClient.SendAsync(request);
-                if (!response.IsSuccessStatusCode)
-                {
-                    var message = "The subscriber's endpoint did not return a success code.";
-                    if (response.Content != null)
-                        message = $"{(int)response.StatusCode}:{await response.Content.ReadAsStringAsync()}";
-
-                    var args = new PublishNotificationFailureEventArgs(subscription, message);
-                    OnNotifyFailed(args);
-                }
-            }
-            catch (AggregateException ex)
-            {
-                var exMessage = ex.InnerExceptions[0];
-                var message = $"Notification failed do to an exception. {exMessage.Message}";
-                var args = new PublishNotificationFailureEventArgs(subscription, message);
-                OnNotifyFailed(args);
-            }
-            catch(Exception ex)
-            {
-                var message = $"Notification failed do to an exception. {ex.Message}";
                 var args = new PublishNotificationFailureEventArgs(subscription, message);
                 OnNotifyFailed(args);
             }

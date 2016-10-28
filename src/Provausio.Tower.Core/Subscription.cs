@@ -10,7 +10,7 @@ namespace Provausio.Tower.Core
         /// <value>
         /// The event identifier.
         /// </value>
-        public object Topic { get; }
+        public object Topic { get; set; }
 
         /// <summary>
         /// Gets the subscriptions.
@@ -18,7 +18,7 @@ namespace Provausio.Tower.Core
         /// <value>
         /// The subscriptions.
         /// </value>
-        public Uri Callback { get; }
+        public Uri Callback { get; set; }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Subscription" /> class.
@@ -42,6 +42,13 @@ namespace Provausio.Tower.Core
         /// <param name="callback">The callback.</param>
         public Subscription(SubscriberEvent subEvent, Uri callback)
             : this(subEvent.Topic, callback)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Subscription"/> class.
+        /// </summary>
+        public Subscription()
         {
         }
     }
