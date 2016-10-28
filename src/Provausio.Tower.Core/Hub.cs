@@ -123,7 +123,7 @@ namespace Provausio.Tower.Core
         /// </summary>
         /// <param name="publication">The publication.</param>
         /// <returns></returns>
-        internal async Task Publish(Publication publication)
+        public async Task PublishDirect(Publication publication)
         {
             var subscriptions = await _subscriptionStore.GetSubscriptions(publication.Topic);
             var subscriberList = subscriptions.ToList();

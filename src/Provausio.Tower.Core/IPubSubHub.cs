@@ -22,5 +22,12 @@ namespace Provausio.Tower.Core
         /// <param name="payload">The payload that will be sent to subscribers.</param>
         /// <returns></returns>
         void Publish(string topic, HttpContent payload);
+
+        /// <summary>
+        /// Executes the publication notifications
+        /// </summary>
+        /// <param name="publication">The publication.</param>
+        /// <returns></returns>
+        Task PublishDirect(Publication publication);
     }
 }

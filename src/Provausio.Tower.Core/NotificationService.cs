@@ -6,7 +6,7 @@ namespace Provausio.Tower.Core
 {
     internal class NotificationService : IPublishQueue
     {
-        private readonly Hub _hub;
+        private readonly IPubSubHub _hub;
         private readonly IPublishQueue _queue;
         private readonly int _emptyQueueDelay;
         private readonly SemaphoreSlim _processorSemaphore;
@@ -23,7 +23,7 @@ namespace Provausio.Tower.Core
         /// <exception cref="ArgumentNullException">
         /// </exception>
         public NotificationService(
-            Hub hub, 
+            IPubSubHub hub, 
             IPublishQueue queue, 
             int notificationThreshold = 10, 
             int emptyQueueDelay = 3000)
@@ -77,7 +77,7 @@ namespace Provausio.Tower.Core
 
         private async void ProcessNotification(Publication publication)
         {
-            await _hub.Publish(publication);
+            await _hub.PublishDirect(publication);
             _processorSemaphore.Release();
         }
 

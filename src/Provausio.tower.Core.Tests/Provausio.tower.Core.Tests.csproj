@@ -76,6 +76,7 @@
   </Choose>
   <ItemGroup>
     <Compile Include="HubTests.cs" />
+    <Compile Include="NotificationServiceTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

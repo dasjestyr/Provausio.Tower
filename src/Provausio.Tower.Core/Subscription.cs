@@ -10,7 +10,7 @@ namespace Provausio.Tower.Core
         /// <value>
         /// The event identifier.
         /// </value>
-        public object TopicId { get; }
+        public object Topic { get; }
 
         /// <summary>
         /// Gets the subscriptions.
@@ -23,15 +23,15 @@ namespace Provausio.Tower.Core
         /// <summary>
         /// Initializes a new instance of the <see cref="Subscription" /> class.
         /// </summary>
-        /// <param name="topicId">The event identifier.</param>
+        /// <param name="topic">The event identifier.</param>
         /// <param name="callback">The callback.</param>
         /// <exception cref="ArgumentNullException"></exception>
-        public Subscription(object topicId, Uri callback)
+        public Subscription(string topic, Uri callback)
         {
-            if(topicId == null)
-                throw new ArgumentNullException(nameof(topicId));
+            if(string.IsNullOrEmpty(topic))
+                throw new ArgumentNullException(nameof(topic));
 
-            TopicId = topicId;
+            Topic = topic;
             Callback = callback;
         }
 
@@ -41,7 +41,7 @@ namespace Provausio.Tower.Core
         /// <param name="subEvent">The sub event.</param>
         /// <param name="callback">The callback.</param>
         public Subscription(SubscriberEvent subEvent, Uri callback)
-            : this(subEvent.TopicId, callback)
+            : this(subEvent.Topic, callback)
         {
         }
     }
