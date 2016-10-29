@@ -37,6 +37,7 @@
     <!-- A reference to the entire .NET Framework is automatically included -->
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Extensions\HttpRequestMessageEx.cs" />
     <Compile Include="Hub.cs" />
     <Compile Include="IChallengeGenerator.cs" />
     <Compile Include="InMemoryPublishQueue.cs" />

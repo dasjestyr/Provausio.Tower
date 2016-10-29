@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Formatting;
 using System.Threading.Tasks;
 using System.Web.Http;
 using Provausio.Tower.Core;
+using Provausio.Tower.Core.Extensions;
 
 namespace Provausio.Tower.Api.Controllers
 {
@@ -21,6 +23,7 @@ namespace Provausio.Tower.Api.Controllers
         [Route("subscribe"), HttpPost]
         public async Task<HttpResponseMessage> Subscribe(FormDataCollection form)
         {
+            Trace.WriteLine("SERVER: Received subscription request...");
             if (form == null)
                 return Request.CreateResponse(HttpStatusCode.BadRequest, "no parameters were provided.");
 
@@ -39,6 +42,10 @@ namespace Provausio.Tower.Api.Controllers
                     ? Request.CreateResponse(HttpStatusCode.Accepted)
                     : Request.CreateResponse(HttpStatusCode.BadRequest, result.Reason);
 
+                Trace.WriteLine(result.SubscriptionSucceeded
+                    ? "SERVER: Subscription suceeded!"
+                    : "SERVER: Client subscription failed!");
+
                 return response;
             }
             catch(Exception ex)
@@ -50,6 +57,7 @@ namespace Provausio.Tower.Api.Controllers
         [Route("publish"), HttpPost]
         public async Task<HttpResponseMessage> Publish(string topic)
         {
+            Trace.WriteLine("SERVER: Received a publication...");
             var content = Request.Content;
             if (topic == null)
                 return Request.CreateResponse(HttpStatusCode.BadRequest, "topic id");
@@ -57,9 +65,10 @@ namespace Provausio.Tower.Api.Controllers
             if (content == null)
                 return Request.CreateResponse(HttpStatusCode.BadRequest, "content");
 
-            // TODO: need a queue...
-            _hub.Publish(topic, content);
+            var requestClone = await Request.Clone();
+            _hub.Publish(topic, requestClone.Content);
 
+            Trace.WriteLine("SERVER: Queued notifications. Subscribers will be notified shortly!");
             return Request.CreateResponse(HttpStatusCode.Accepted);
         }
     }

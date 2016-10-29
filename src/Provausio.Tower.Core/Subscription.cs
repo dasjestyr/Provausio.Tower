@@ -10,7 +10,7 @@ namespace Provausio.Tower.Core
         /// <value>
         /// The event identifier.
         /// </value>
-        public object Topic { get; set; }
+        public string Topic { get; set; }
 
         /// <summary>
         /// Gets the subscriptions.

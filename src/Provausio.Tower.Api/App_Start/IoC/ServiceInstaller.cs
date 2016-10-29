@@ -13,7 +13,7 @@ namespace Provausio.Tower.Api.App_Start.IoC
             container.Register(Component
                 .For<IPubSubHub>()
                 .ImplementedBy<Hub>()
-                .LifestylePerWebRequest());
+                .LifestyleSingleton());
 
             container.Register(Component
                 .For<IChallengeGenerator>()
@@ -22,8 +22,8 @@ namespace Provausio.Tower.Api.App_Start.IoC
 
             container.Register(Component
                 .For<ISubscriptionStore>()
-                .ImplementedBy<SubscriptionStore>()
-                .LifestylePerWebRequest());
+                .ImplementedBy<InMemorySubscriptionStore>()
+                .LifestyleSingleton());
         }
     }
 }
