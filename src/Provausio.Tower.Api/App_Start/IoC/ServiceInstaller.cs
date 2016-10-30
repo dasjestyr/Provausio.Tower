@@ -16,8 +16,8 @@ namespace Provausio.Tower.Api.App_Start.IoC
                 .LifestyleSingleton());
 
             container.Register(Component
-                .For<IHasher>()
-                .ImplementedBy<HmacSha1Hasher>()
+                .For<ICryptoFunctions>()
+                .ImplementedBy<CryptoFunctions>()
                 .LifestyleSingleton());
 
             container.Register(Component

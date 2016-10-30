@@ -3480,7 +3480,7 @@ jQuery.support = (function( support ) {
 	// Run tests that need a body at doc ready
 	jQuery(function() {
 		var container, marginDiv, tds,
-			divReset = "padding:0;margin:0;border:0;display:block;box-sizing:content-box;-moz-box-sizing:content-box;-webkit-box-sizing:content-box;",
+			divReset = "padding:0;margin:0;border:0;display:block;box-sizing:content-box;-moz-box-sizing:plainText-box;-webkit-box-sizing:plainText-box;",
 			body = document.getElementsByTagName("body")[0];
 
 		if ( !body ) {

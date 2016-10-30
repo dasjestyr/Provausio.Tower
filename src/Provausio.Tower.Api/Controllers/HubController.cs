@@ -34,9 +34,17 @@ namespace Provausio.Tower.Api.Controllers
             var callback = form.Get("hub.callback");
             var token = form.Get("hub.verify_token");
             var mode = form.Get("hub.mode");
+
             var secret = form.Get("hub.secret");
 
-            if(string.IsNullOrEmpty(topic) || string.IsNullOrEmpty(callback) || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(mode))
+            /* Per section 5.1. Only use the secret if provided via https */
+#if !DEBUG
+            
+            if (!string.IsNullOrEmpty(secret) &&
+                !Request.RequestUri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase))
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, "may not specify secret over unsecure connection");
+#endif
+            if (string.IsNullOrEmpty(topic) || string.IsNullOrEmpty(callback) || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(mode))
                 return Request.CreateResponse(HttpStatusCode.BadRequest, "invalid parameters");
 
             try

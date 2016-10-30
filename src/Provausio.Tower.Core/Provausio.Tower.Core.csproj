@@ -39,7 +39,7 @@
   <ItemGroup>
     <Compile Include="Extensions\HttpRequestMessageEx.cs" />
     <Compile Include="Hub.cs" />
-    <Compile Include="IHasher.cs" />
+    <Compile Include="ICryptoFunctions.cs" />
     <Compile Include="InMemoryPublishQueue.cs" />
     <Compile Include="IPubSubHub.cs" />
     <Compile Include="IPublishQueue.cs" />

@@ -14,7 +14,7 @@ namespace Provausio.Tower.Core
         private const string TopicProperty = "hub.topic";
 
         private readonly ISubscriptionStore _subscriptionStore;
-        private readonly IHasher _hasher;
+        private readonly ICryptoFunctions _cryptoFunctions;
         private readonly HttpClient _httpClient;
 
         private bool _isDisposed;
@@ -24,25 +24,25 @@ namespace Provausio.Tower.Core
         /// Initializes a new instance of the <see cref="Hub"/> class.
         /// </summary>
         /// <param name="subscriptionStore">The subscription store.</param>
-        /// <param name="hasher">The challenge generator.</param>
+        /// <param name="cryptoFunctions">The challenge generator.</param>
         /// <param name="queue"></param>
         /// <param name="messageHandler">The message handler.</param>
         /// <exception cref="ArgumentNullException">
         /// </exception>
         public Hub(
             ISubscriptionStore subscriptionStore, 
-            IHasher hasher, 
+            ICryptoFunctions cryptoFunctions, 
             IPublishQueue queue,
             HttpMessageHandler messageHandler)
         {
             if(subscriptionStore == null)
                 throw new ArgumentNullException(nameof(subscriptionStore));
 
-            if(hasher == null)
-                throw new ArgumentNullException(nameof(hasher));
+            if(cryptoFunctions == null)
+                throw new ArgumentNullException(nameof(cryptoFunctions));
             
             _subscriptionStore = subscriptionStore;
-            _hasher = hasher;
+            _cryptoFunctions = cryptoFunctions;
             _notificationService = new NotificationService(this, queue ?? new InMemoryPublishQueue());
 
             _httpClient = messageHandler == null
@@ -56,13 +56,13 @@ namespace Provausio.Tower.Core
         /// Initializes a new instance of the <see cref="Hub" /> class.
         /// </summary>
         /// <param name="subscriptionStore">The subscription store.</param>
-        /// <param name="hasher">The challenge generator.</param>
+        /// <param name="cryptoFunctions">The challenge generator.</param>
         /// <param name="queue">The queue.</param>
         public Hub(
             ISubscriptionStore subscriptionStore, 
-            IHasher hasher,
+            ICryptoFunctions cryptoFunctions,
             IPublishQueue queue)
-            : this(subscriptionStore, hasher, queue, null)
+            : this(subscriptionStore, cryptoFunctions, queue, null)
         {
         }
 
@@ -70,11 +70,11 @@ namespace Provausio.Tower.Core
         /// Initializes a new instance of the <see cref="Hub"/> class.
         /// </summary>
         /// <param name="subscriptionStore">The subscription store.</param>
-        /// <param name="hasher">The challenge generator.</param>
+        /// <param name="cryptoFunctions">The challenge generator.</param>
         public Hub(
             ISubscriptionStore subscriptionStore,
-            IHasher hasher)
-            : this(subscriptionStore, hasher, null, null)
+            ICryptoFunctions cryptoFunctions)
+            : this(subscriptionStore, cryptoFunctions, null, null)
         {
         }
 
@@ -89,11 +89,15 @@ namespace Provausio.Tower.Core
             string verifyToken)
         {
             CheckDispose();
+            
             var result = await VerifyCallback(subscription.Topic, subscription.Callback, verifyToken);
 
             if (!result.SubscriptionSucceeded)
                 return result;
-            
+
+            if (!string.IsNullOrEmpty(subscription.Secret))
+                subscription.Secret = _cryptoFunctions.Encrypt(subscription.Secret, subscription.Callback.ToString());
+
             await _subscriptionStore.Subscribe(subscription);
 
             return result;
@@ -144,8 +148,14 @@ namespace Provausio.Tower.Core
 
             if (!string.IsNullOrEmpty(subscription.Secret))
             {
-                var hash = _hasher.GetHmacSha1Hash(await content.ReadAsByteArrayAsync(), subscription.Secret);
-                request.Headers.Add("X-HubSignature", hash);
+                var secret = _cryptoFunctions.Decrypt(subscription.Secret, subscription.Callback.ToString());
+
+                /* Section 8 */
+                var hash = _cryptoFunctions.GetHmacSha1Hash(
+                    await content.ReadAsByteArrayAsync(),
+                    secret);
+
+                request.Headers.Add("X-Hub-Signature", hash);
             }
 
             var response = await _httpClient.SendAsync(request);
@@ -170,7 +180,7 @@ namespace Provausio.Tower.Core
             // using some request data to generate a unique hash as a challenge
             var uniqueString = $"{callback}|{DateTime.UtcNow.Millisecond}";
             var uniqueStringAsBytes = Encoding.UTF8.GetBytes(uniqueString);
-            var challenge = _hasher.GetHmacSha1Hash(uniqueStringAsBytes, uniqueString);
+            var challenge = _cryptoFunctions.GetHmacSha1Hash(uniqueStringAsBytes, uniqueString);
 
             // modify the callback uri to include required parameters (mode, topic, challenge) TODO: implement hub.lease
             var validationUrl = GetValidationUri(topic, callback, verifyToken, challenge, "subscribe");

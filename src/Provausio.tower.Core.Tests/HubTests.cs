@@ -13,14 +13,14 @@ namespace Provausio.tower.Core.Tests
     public class HubTests
     {
         private const string ChallengeValue = "foo";
-        private readonly Mock<IHasher> _challengeGenerator;
+        private readonly Mock<ICryptoFunctions> _challengeGenerator;
         private readonly Mock<ISubscriptionStore> _subscriptionStore;
         private readonly Mock<IPublishQueue> _queue;
         private readonly Subscription _testSubscription;
 
         public HubTests()
         {
-            _challengeGenerator = new Mock<IHasher>();
+            _challengeGenerator = new Mock<ICryptoFunctions>();
             _challengeGenerator.Setup(m => m.GetHmacSha1Hash(It.IsAny<byte[]>(), It.IsAny<string>())).Returns(ChallengeValue);
             _queue = new Mock<IPublishQueue>();
             _subscriptionStore = new Mock<ISubscriptionStore>();
