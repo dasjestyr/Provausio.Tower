@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
 
@@ -33,6 +34,17 @@ namespace Provausio.Tower.Core.Extensions
                 clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
 
             return clone;
+        }
+
+        public static async Task<HttpContent> Clone(this HttpContent content)
+        {
+            var ms = new MemoryStream();
+            if(content == null)
+                throw new ArgumentNullException(nameof(content));
+            
+            await content.CopyToAsync(ms).ConfigureAwait(false);
+            ms.Position = 0;
+            return new StreamContent(ms);
         }
     }
 }

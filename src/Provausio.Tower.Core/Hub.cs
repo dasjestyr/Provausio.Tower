@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
+using Provausio.Tower.Core.Extensions;
 
 namespace Provausio.Tower.Core
 {
@@ -143,15 +145,23 @@ namespace Provausio.Tower.Core
             if (!subscriberList.Any())
                 return;
             
-            var notifyTasks = subscriberList.Select(sub => Notify(publication, sub, publication.Payload));
+            var notifyTasks = subscriberList
+                .Select(sub => Notify(publication, sub, publication.Payload))
+                .ToList();
 
             // TODO: notify if timeout
             await Task.WhenAll(notifyTasks);
+
+            Debug.WriteLine($"Processed {notifyTasks.Count} notifications.");
         }
 
         private async Task Notify(Publication publication, Subscription subscription, HttpContent content)
         {
-            var request = new HttpRequestMessage(HttpMethod.Post, subscription.Callback) {Content = content};
+            // must clone because sending each payload will cause the http client to
+            // dispose it, leading to an exception on subsequent notifications
+            var contentClone = await content.Clone();
+
+            var request = new HttpRequestMessage(HttpMethod.Post, subscription.Callback) {Content = contentClone };
             request.Headers.Add("link", $"<{publication.HubLocation} />; rel=\"hub\", <{publication.Topic} />; rel=\"self\""); // required headers
 
             if (!string.IsNullOrEmpty(subscription.Secret))
@@ -160,7 +170,7 @@ namespace Provausio.Tower.Core
 
                 /* Section 8 */
                 var hash = _cryptoFunctions.GetHmacSha1Hash(
-                    await content.ReadAsByteArrayAsync(),
+                    await contentClone.ReadAsByteArrayAsync(),
                     secret);
 
                 request.Headers.Add("X-Hub-Signature", hash);
