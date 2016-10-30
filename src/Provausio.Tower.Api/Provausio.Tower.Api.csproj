@@ -257,7 +257,6 @@
     <Compile Include="Results\ChallengeResult.cs" />
     <Compile Include="CryptoFunctions.cs" />
     <Compile Include="Startup.cs" />
-    <Compile Include="StringCipher.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Areas\HelpPage\HelpPage.css" />
