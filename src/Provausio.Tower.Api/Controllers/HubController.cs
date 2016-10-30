@@ -34,13 +34,15 @@ namespace Provausio.Tower.Api.Controllers
             var callback = form.Get("hub.callback");
             var token = form.Get("hub.verify_token");
             var mode = form.Get("hub.mode");
+            var secret = form.Get("hub.secret");
 
             if(string.IsNullOrEmpty(topic) || string.IsNullOrEmpty(callback) || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(mode))
                 return Request.CreateResponse(HttpStatusCode.BadRequest, "invalid parameters");
 
             try
             {
-                var result = await _hub.Subscribe(topic, new Uri(callback), token);
+                var newSubscription = new Subscription(topic, new Uri(callback), secret);
+                var result = await _hub.Subscribe(newSubscription, token);
                 var response = result.SubscriptionSucceeded
                     ? Request.CreateResponse(HttpStatusCode.Accepted)
                     : Request.CreateResponse(HttpStatusCode.BadRequest, result.Reason);

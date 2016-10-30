@@ -9,11 +9,10 @@ namespace Provausio.Tower.Core
         /// <summary>
         /// Subscribes the callback to the specified topic.
         /// </summary>
-        /// <param name="topic">The topic.</param>
-        /// <param name="callback">The callback.</param>
+        /// <param name="subscription">The subscription.</param>
         /// <param name="verifyToken">The verify token.</param>
         /// <returns></returns>
-        Task<SubscriptionResult> Subscribe(string topic, Uri callback, string verifyToken);
+        Task<SubscriptionResult> Subscribe(Subscription subscription, string verifyToken);
 
         /// <summary>
         /// Notifies all subscribers of an event

@@ -16,8 +16,8 @@ namespace Provausio.Tower.Api.App_Start.IoC
                 .LifestyleSingleton());
 
             container.Register(Component
-                .For<IChallengeGenerator>()
-                .ImplementedBy<Sha256ChallengeGenerator>()
+                .For<IHasher>()
+                .ImplementedBy<HmacSha1Hasher>()
                 .LifestyleSingleton());
 
             container.Register(Component

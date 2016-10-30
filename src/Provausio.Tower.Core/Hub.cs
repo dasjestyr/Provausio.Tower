@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace Provausio.Tower.Core
@@ -13,7 +14,7 @@ namespace Provausio.Tower.Core
         private const string TopicProperty = "hub.topic";
 
         private readonly ISubscriptionStore _subscriptionStore;
-        private readonly IChallengeGenerator _challengeGenerator;
+        private readonly IHasher _hasher;
         private readonly HttpClient _httpClient;
 
         private bool _isDisposed;
@@ -23,25 +24,25 @@ namespace Provausio.Tower.Core
         /// Initializes a new instance of the <see cref="Hub"/> class.
         /// </summary>
         /// <param name="subscriptionStore">The subscription store.</param>
-        /// <param name="challengeGenerator">The challenge generator.</param>
+        /// <param name="hasher">The challenge generator.</param>
         /// <param name="queue"></param>
         /// <param name="messageHandler">The message handler.</param>
         /// <exception cref="ArgumentNullException">
         /// </exception>
         public Hub(
             ISubscriptionStore subscriptionStore, 
-            IChallengeGenerator challengeGenerator, 
+            IHasher hasher, 
             IPublishQueue queue,
             HttpMessageHandler messageHandler)
         {
             if(subscriptionStore == null)
                 throw new ArgumentNullException(nameof(subscriptionStore));
 
-            if(challengeGenerator == null)
-                throw new ArgumentNullException(nameof(challengeGenerator));
+            if(hasher == null)
+                throw new ArgumentNullException(nameof(hasher));
             
             _subscriptionStore = subscriptionStore;
-            _challengeGenerator = challengeGenerator;
+            _hasher = hasher;
             _notificationService = new NotificationService(this, queue ?? new InMemoryPublishQueue());
 
             _httpClient = messageHandler == null
@@ -55,13 +56,13 @@ namespace Provausio.Tower.Core
         /// Initializes a new instance of the <see cref="Hub" /> class.
         /// </summary>
         /// <param name="subscriptionStore">The subscription store.</param>
-        /// <param name="challengeGenerator">The challenge generator.</param>
+        /// <param name="hasher">The challenge generator.</param>
         /// <param name="queue">The queue.</param>
         public Hub(
             ISubscriptionStore subscriptionStore, 
-            IChallengeGenerator challengeGenerator,
+            IHasher hasher,
             IPublishQueue queue)
-            : this(subscriptionStore, challengeGenerator, queue, null)
+            : this(subscriptionStore, hasher, queue, null)
         {
         }
 
@@ -69,33 +70,30 @@ namespace Provausio.Tower.Core
         /// Initializes a new instance of the <see cref="Hub"/> class.
         /// </summary>
         /// <param name="subscriptionStore">The subscription store.</param>
-        /// <param name="challengeGenerator">The challenge generator.</param>
+        /// <param name="hasher">The challenge generator.</param>
         public Hub(
             ISubscriptionStore subscriptionStore,
-            IChallengeGenerator challengeGenerator)
-            : this(subscriptionStore, challengeGenerator, null, null)
+            IHasher hasher)
+            : this(subscriptionStore, hasher, null, null)
         {
         }
 
         /// <summary>
         /// Subscribes the callback to the specified topic.
         /// </summary>
-        /// <param name="topic">The topic.</param>
-        /// <param name="callback">The callback.</param>
+        /// <param name="subscription">The subscription.</param>
         /// <param name="verifyToken">The verify token.</param>
         /// <returns></returns>
         public async Task<SubscriptionResult> Subscribe(
-            string topic, 
-            Uri callback, 
+            Subscription subscription, 
             string verifyToken)
         {
             CheckDispose();
-            var result = await VerifyCallback(topic, callback, verifyToken);
+            var result = await VerifyCallback(subscription.Topic, subscription.Callback, verifyToken);
 
             if (!result.SubscriptionSucceeded)
                 return result;
-
-            var subscription = new Subscription(topic, callback);
+            
             await _subscriptionStore.Subscribe(subscription);
 
             return result;
@@ -143,7 +141,13 @@ namespace Provausio.Tower.Core
         private async Task Notify(Subscription subscription, HttpContent content)
         {
             var request = new HttpRequestMessage(HttpMethod.Post, subscription.Callback) {Content = content};
-            
+
+            if (!string.IsNullOrEmpty(subscription.Secret))
+            {
+                var hash = _hasher.GetHmacSha1Hash(await content.ReadAsByteArrayAsync(), subscription.Secret);
+                request.Headers.Add("X-HubSignature", hash);
+            }
+
             var response = await _httpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
@@ -155,7 +159,7 @@ namespace Provausio.Tower.Core
                 OnNotifyFailed(args);
             }
         }
-
+        
         private async Task<SubscriptionResult> VerifyCallback(
             string topic, 
             Uri callback, 
@@ -163,8 +167,10 @@ namespace Provausio.Tower.Core
         {
             // section 5.3 - Verify Intent
             
-            // this is just a random format to try and generate a unique challenge. It doesn't need to be recreated later.
-            var challenge = _challengeGenerator.GetChallenge($"{callback}|{DateTime.UtcNow.Millisecond}");
+            // using some request data to generate a unique hash as a challenge
+            var uniqueString = $"{callback}|{DateTime.UtcNow.Millisecond}";
+            var uniqueStringAsBytes = Encoding.UTF8.GetBytes(uniqueString);
+            var challenge = _hasher.GetHmacSha1Hash(uniqueStringAsBytes, uniqueString);
 
             // modify the callback uri to include required parameters (mode, topic, challenge) TODO: implement hub.lease
             var validationUrl = GetValidationUri(topic, callback, verifyToken, challenge, "subscribe");

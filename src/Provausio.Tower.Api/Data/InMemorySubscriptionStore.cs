@@ -7,13 +7,15 @@ using Provausio.Tower.Core;
 
 namespace Provausio.Tower.Api.Data
 {
+    
+
     public class InMemorySubscriptionStore : ISubscriptionStore
     {
-        private readonly ConcurrentDictionary<string, List<string>> _store;
+        private readonly ConcurrentDictionary<string, List<Subscription>> _store;
 
         public InMemorySubscriptionStore()
         {
-            _store = new ConcurrentDictionary<string, List<string>>();
+            _store = new ConcurrentDictionary<string, List<Subscription>>();
         }
 
         public Task<IEnumerable<Subscription>> GetSubscriptions(string topic)
@@ -21,7 +23,7 @@ namespace Provausio.Tower.Api.Data
             if (!_store.ContainsKey(topic))
                 return Task.FromResult(new List<Subscription>().AsEnumerable());
 
-            var callbacks = _store[topic].Select(cb => new Subscription(topic, new Uri(cb)));
+            var callbacks = _store[topic].AsEnumerable();
             return Task.FromResult(callbacks);
         }
 
@@ -31,22 +33,19 @@ namespace Provausio.Tower.Api.Data
             {
                 var original = _store[subscription.Topic];
 
-                if (original.Contains(subscription.Callback.ToString()))
+                if (original.Any(sub => sub.Callback == subscription.Callback))
                     return Task.CompletedTask;
 
-                var newValues = new string[original.Count + 1];
-
-                original.CopyTo(newValues);
-                newValues[newValues.Length - 1] = subscription.Callback.ToString();
-
-                _store.TryUpdate(subscription.Topic, newValues.ToList(), original);
+                var newValues = original;
+                newValues.Add(subscription);
+                
+                _store.TryUpdate(subscription.Topic, newValues, original);
             }
             else
             {
-                var newList = new List<string> { subscription.Callback.ToString() };
+                var newList = new List<Subscription> { subscription };
                 _store.TryAdd(subscription.Topic, newList);
             }
-
 
             return Task.CompletedTask;
         }

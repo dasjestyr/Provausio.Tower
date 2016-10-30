@@ -13,18 +13,18 @@ namespace Provausio.tower.Core.Tests
     public class HubTests
     {
         private const string ChallengeValue = "foo";
-        private readonly Mock<IChallengeGenerator> _challengeGenerator;
+        private readonly Mock<IHasher> _challengeGenerator;
         private readonly Mock<ISubscriptionStore> _subscriptionStore;
-        private readonly Uri _testUri;
         private readonly Mock<IPublishQueue> _queue;
+        private readonly Subscription _testSubscription;
 
         public HubTests()
         {
-            _testUri = new Uri("http://my.testapi.com/api");
-            _challengeGenerator = new Mock<IChallengeGenerator>();
-            _challengeGenerator.Setup(m => m.GetChallenge(It.IsAny<object>())).Returns(ChallengeValue);
+            _challengeGenerator = new Mock<IHasher>();
+            _challengeGenerator.Setup(m => m.GetHmacSha1Hash(It.IsAny<byte[]>(), It.IsAny<string>())).Returns(ChallengeValue);
             _queue = new Mock<IPublishQueue>();
             _subscriptionStore = new Mock<ISubscriptionStore>();
+            _testSubscription = new Subscription("http://test-topic.com", new Uri("http://test-callback.com"), "foo-bar");
         }
 
         [Fact]
@@ -70,7 +70,7 @@ namespace Provausio.tower.Core.Tests
             var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
-            var result = await hub.Subscribe("my topic", _testUri, "myToken");
+            var result = await hub.Subscribe(_testSubscription, "myToken");
 
             // assert
             Assert.False(result.SubscriptionSucceeded);
@@ -85,7 +85,7 @@ namespace Provausio.tower.Core.Tests
             var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
-            var result = await hub.Subscribe("my topic", _testUri, "baz");
+            var result = await hub.Subscribe(_testSubscription, "baz");
 
             // assert
             Assert.False(result.SubscriptionSucceeded);
@@ -99,7 +99,7 @@ namespace Provausio.tower.Core.Tests
             var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
-            var result = await hub.Subscribe("my topic", _testUri, "baz");
+            var result = await hub.Subscribe(_testSubscription, "baz");
 
             // assert
             Assert.False(result.SubscriptionSucceeded);
@@ -116,7 +116,7 @@ namespace Provausio.tower.Core.Tests
             var hub = new Hub(store.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
-            var result = await hub.Subscribe("my topic", _testUri, "baz");
+            var result = await hub.Subscribe(_testSubscription, "baz");
 
             // assert
             store.Verify(m => m.Subscribe(It.IsAny<Subscription>()), Times.Never);
@@ -134,7 +134,7 @@ namespace Provausio.tower.Core.Tests
                 handler);
 
             // act
-            var result = await hub.Subscribe("my topic", _testUri, "verifyToken");
+            var result = await hub.Subscribe(_testSubscription, "verifyToken");
 
             // assert
             Assert.True(result.SubscriptionSucceeded);
@@ -153,7 +153,7 @@ namespace Provausio.tower.Core.Tests
             var hub = new Hub(subStore.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
-            var result = await hub.Subscribe("my topic", _testUri, "verifyToken");
+            var result = await hub.Subscribe(_testSubscription, "verifyToken");
 
             // assert
             subStore.Verify(m => m.Subscribe(It.IsAny<Subscription>()), Times.Once);

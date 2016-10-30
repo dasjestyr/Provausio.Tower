@@ -14,14 +14,14 @@ namespace Provausio.tower.Core.Tests
     {
         private readonly Mock<IPublishQueue> _queueMock;
         private readonly Mock<ISubscriptionStore> _subStoreMock;
-        private readonly Mock<IChallengeGenerator> _generator;
+        private readonly Mock<IHasher> _generator;
         private readonly Mock<IPubSubHub> _hub;
         private readonly ConcurrentQueue<Publication> _testQueue;
 
         public NotificationServiceTests()
         {
             _subStoreMock = new Mock<ISubscriptionStore>();
-            _generator = new Mock<IChallengeGenerator>();
+            _generator = new Mock<IHasher>();
             _hub = new Mock<IPubSubHub>();
 
             _testQueue = new ConcurrentQueue<Publication>();
