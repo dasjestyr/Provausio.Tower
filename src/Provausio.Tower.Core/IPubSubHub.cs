@@ -1,5 +1,3 @@
-using System;
-using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace Provausio.Tower.Core
@@ -17,10 +15,8 @@ namespace Provausio.Tower.Core
         /// <summary>
         /// Notifies all subscribers of an event
         /// </summary>
-        /// <param name="topic">The topic identifier.</param>
-        /// <param name="payload">The payload that will be sent to subscribers.</param>
-        /// <returns></returns>
-        void Publish(string topic, HttpContent payload);
+        /// <param name="publication">The publication.</param>
+        void Publish(Publication publication);
 
         /// <summary>
         /// Executes the publication notifications

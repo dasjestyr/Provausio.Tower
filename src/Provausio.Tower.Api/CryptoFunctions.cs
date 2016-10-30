@@ -34,6 +34,8 @@ namespace Provausio.Tower.Api
 
             return hex.ToString();
         }
+        
+        #region -- Copy Pasta http://stackoverflow.com/questions/10168240/encrypting-decrypting-a-string-in-c-sharp --
 
         public string Encrypt(string plainText, string passPhrase)
         {
@@ -129,5 +131,7 @@ namespace Provausio.Tower.Api
 
             return randomBytes;
         }
+
+        #endregion
     }
 }

@@ -1,4 +1,6 @@
-﻿using Castle.MicroKernel.Registration;
+﻿using System;
+using System.Configuration;
+using Castle.MicroKernel.Registration;
 using Castle.MicroKernel.SubSystems.Configuration;
 using Castle.Windsor;
 using Provausio.Tower.Api.Data;
@@ -13,6 +15,7 @@ namespace Provausio.Tower.Api.App_Start.IoC
             container.Register(Component
                 .For<IPubSubHub>()
                 .ImplementedBy<Hub>()
+                .DependsOn(Dependency.OnValue("hubLocation", GetHubUri())) // TODO: make configurable
                 .LifestyleSingleton());
 
             container.Register(Component
@@ -24,6 +27,12 @@ namespace Provausio.Tower.Api.App_Start.IoC
                 .For<ISubscriptionStore>()
                 .ImplementedBy<InMemorySubscriptionStore>()
                 .LifestyleSingleton());
+        }
+
+        private Uri GetHubUri()
+        {
+            var hostname = ConfigurationManager.AppSettings.Get("PublicHostname");
+            return new Uri(hostname);
         }
     }
 }

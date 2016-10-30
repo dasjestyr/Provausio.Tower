@@ -17,6 +17,8 @@ namespace Provausio.tower.Core.Tests
         private readonly Mock<ISubscriptionStore> _subscriptionStore;
         private readonly Mock<IPublishQueue> _queue;
         private readonly Subscription _testSubscription;
+        private readonly Uri _hubLocation;
+        private Publication _testPublication;
 
         public HubTests()
         {
@@ -25,6 +27,8 @@ namespace Provausio.tower.Core.Tests
             _queue = new Mock<IPublishQueue>();
             _subscriptionStore = new Mock<ISubscriptionStore>();
             _testSubscription = new Subscription("http://test-topic.com", new Uri("http://test-callback.com"), "foo-bar");
+            _hubLocation = new Uri("http://localhost:61616/hub");
+            _testPublication = new Publication("http://test-topic.com", new StringContent("test string"), _hubLocation);
         }
 
         [Fact]
@@ -33,7 +37,7 @@ namespace Provausio.tower.Core.Tests
             // arrange
             
             // act
-            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object);
+            var hub = new Hub(_hubLocation, _subscriptionStore.Object, _challengeGenerator.Object);
 
             // assert
             Assert.NotNull(hub);
@@ -47,7 +51,7 @@ namespace Provausio.tower.Core.Tests
             // act
 
             // assert
-            Assert.Throws<ArgumentNullException>(() => new Hub(null, _challengeGenerator.Object));
+            Assert.Throws<ArgumentNullException>(() => new Hub(_hubLocation, null, _challengeGenerator.Object));
         }
 
         [Fact]
@@ -58,7 +62,7 @@ namespace Provausio.tower.Core.Tests
             // act
 
             // assert
-            Assert.Throws<ArgumentNullException>(() => new Hub(_subscriptionStore.Object, null));
+            Assert.Throws<ArgumentNullException>(() => new Hub(_hubLocation, _subscriptionStore.Object, null));
         }
 
         [Fact]
@@ -67,7 +71,7 @@ namespace Provausio.tower.Core.Tests
             // arrange
             
             var handler = new FakeHandler(HttpStatusCode.NotFound, null);
-            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
+            var hub = new Hub(_hubLocation, _subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
             var result = await hub.Subscribe(_testSubscription, "myToken");
@@ -82,7 +86,7 @@ namespace Provausio.tower.Core.Tests
             // arrange
             var subscriberChallengeReply = "bar"; // server sends "foo"
             var handler = new FakeHandler(HttpStatusCode.OK, subscriberChallengeReply);
-            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
+            var hub = new Hub(_hubLocation, _subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
             var result = await hub.Subscribe(_testSubscription, "baz");
@@ -96,7 +100,7 @@ namespace Provausio.tower.Core.Tests
         {
             // arrange
             var handler = new FakeHandler(HttpStatusCode.OK, null);
-            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
+            var hub = new Hub(_hubLocation, _subscriptionStore.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
             var result = await hub.Subscribe(_testSubscription, "baz");
@@ -113,7 +117,7 @@ namespace Provausio.tower.Core.Tests
             store.Setup(m => m.Subscribe(It.IsAny<Subscription>()));
              
             var handler = new FakeHandler(HttpStatusCode.OK, null);
-            var hub = new Hub(store.Object, _challengeGenerator.Object, _queue.Object, handler);
+            var hub = new Hub(_hubLocation, store.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
             var result = await hub.Subscribe(_testSubscription, "baz");
@@ -128,6 +132,7 @@ namespace Provausio.tower.Core.Tests
             // arrange
             var handler = new FakeHandler(HttpStatusCode.OK, ChallengeValue);
             var hub = new Hub(
+                _hubLocation, 
                 _subscriptionStore.Object,
                 _challengeGenerator.Object, 
                 _queue.Object, 
@@ -150,7 +155,7 @@ namespace Provausio.tower.Core.Tests
                 .Returns(Task.FromResult(It.IsAny<SubscriptionResult>()));
 
             var handler = new FakeHandler(HttpStatusCode.OK, ChallengeValue);
-            var hub = new Hub(subStore.Object, _challengeGenerator.Object, _queue.Object, handler);
+            var hub = new Hub(_hubLocation, subStore.Object, _challengeGenerator.Object, _queue.Object, handler);
 
             // act
             var result = await hub.Subscribe(_testSubscription, "verifyToken");
@@ -160,27 +165,15 @@ namespace Provausio.tower.Core.Tests
         }
 
         [Fact]
-        public void Publish_NullTopic_Throws()
+        public void Publish_NullPublication_Throws()
         {
             // arrange
-            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object);
+            var hub = new Hub(_hubLocation, _subscriptionStore.Object, _challengeGenerator.Object, _queue.Object);
 
             // act
 
             // assert
-            Assert.Throws<ArgumentNullException>(() => hub.Publish(null, new StringContent("test payload")));
-        }
-
-        [Fact]
-        public void Publish_NullContent_Throws()
-        {
-            // arrange
-            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, _queue.Object);
-
-            // act
-
-            // assert
-            Assert.Throws<ArgumentNullException>(() => hub.Publish("foo", null));
+            Assert.Throws<ArgumentNullException>(() => hub.Publish(null));
         }
 
         [Fact]
@@ -189,10 +182,10 @@ namespace Provausio.tower.Core.Tests
             // arrange
             var queue = new Mock<IPublishQueue>();
             queue.Setup(m => m.Enqueue(It.IsAny<Publication>()));
-            var hub = new Hub(_subscriptionStore.Object, _challengeGenerator.Object, queue.Object);
+            var hub = new Hub(_hubLocation, _subscriptionStore.Object, _challengeGenerator.Object, queue.Object);
 
             // act
-            hub.Publish("foo", new StringContent("test payload"));
+            hub.Publish(_testPublication);
 
             // assert
             queue.Verify(m => m.Enqueue(It.IsAny<Publication>()), Times.Once);
@@ -209,13 +202,14 @@ namespace Provausio.tower.Core.Tests
             var handler = new FakeHandler(HttpStatusCode.OK, "test");
 
             var hub = new Hub(
+                _hubLocation,
                 _subscriptionStore.Object, 
                 _challengeGenerator.Object, 
                 _queue.Object, 
                 handler);
 
             // act
-            await hub.PublishDirect(new Publication("foo", new StringContent("test payload")));
+            await hub.PublishDirect(_testPublication);
             await Task.Delay(500);
 
             // assert
@@ -233,13 +227,14 @@ namespace Provausio.tower.Core.Tests
             var handler = new FakeHandler(HttpStatusCode.OK, "test");
 
             var hub = new Hub(
+                _hubLocation,
                 _subscriptionStore.Object,
                 _challengeGenerator.Object,
                 _queue.Object,
                 handler);
 
             // act
-            await hub.PublishDirect(new Publication("foo", new StringContent("test payload")));
+            await hub.PublishDirect(_testPublication);
             await Task.Delay(500);
 
             // assert
@@ -257,6 +252,7 @@ namespace Provausio.tower.Core.Tests
             var handler = new FakeHandler(HttpStatusCode.NotFound, "test failure");
 
             var hub = new Hub(
+                _hubLocation,
                 _subscriptionStore.Object,
                 _challengeGenerator.Object,
                 _queue.Object,
@@ -266,7 +262,7 @@ namespace Provausio.tower.Core.Tests
             hub.PublishNotificationFailed += (o, s) => failCount++;
 
             // act
-            await hub.PublishDirect(new Publication("foo", new StringContent("test payload")));
+            await hub.PublishDirect(_testPublication);
             await Task.Delay(500);
 
             // assert
@@ -284,6 +280,7 @@ namespace Provausio.tower.Core.Tests
             var handler = new FakeHandler(HttpStatusCode.OK, "test");
 
             var hub = new Hub(
+                _hubLocation,
                 _subscriptionStore.Object,
                 _challengeGenerator.Object,
                 _queue.Object,
@@ -296,7 +293,7 @@ namespace Provausio.tower.Core.Tests
             // assert
             await
                 Assert.ThrowsAsync<ObjectDisposedException>(
-                    () => hub.PublishDirect(new Publication("foo", new StringContent("test payload"))));
+                    () => hub.PublishDirect(_testPublication));
         }
 
         private static IEnumerable<Subscription> GetSubs(int count)

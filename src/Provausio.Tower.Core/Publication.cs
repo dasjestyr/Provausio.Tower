@@ -22,13 +22,24 @@ namespace Provausio.Tower.Core
         public HttpContent Payload { get; }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Publication"/> class.
+        /// Gets the hub location.
+        /// </summary>
+        /// <value>
+        /// The hub location.
+        /// </value>
+        public Uri HubLocation { get; }
+
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Publication" /> class.
         /// </summary>
         /// <param name="topic">The topic.</param>
         /// <param name="payload">The payload.</param>
+        /// <param name="hubLocation">The hub location.</param>
         /// <exception cref="ArgumentNullException">
         /// </exception>
-        public Publication(string topic, HttpContent payload)
+        /// <exception cref="ArgumentException">Must include self and hub headers at minimum</exception>
+        public Publication(string topic, HttpContent payload, Uri hubLocation)
         {
             if(string.IsNullOrEmpty(topic))
                 throw new ArgumentNullException(nameof(topic));
@@ -36,8 +47,12 @@ namespace Provausio.Tower.Core
             if(payload == null)
                 throw new ArgumentNullException(nameof(payload));
 
+            if(hubLocation == null)
+                throw new ArgumentNullException(nameof(hubLocation));
+
             Topic = topic;
             Payload = payload;
+            HubLocation = hubLocation;
         }
     }
 }

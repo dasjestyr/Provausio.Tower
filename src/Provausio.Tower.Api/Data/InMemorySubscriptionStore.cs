@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Provausio.Tower.Core;
+using Provausio.Tower.Core.Extensions;
 
 namespace Provausio.Tower.Api.Data
 {
@@ -33,10 +34,12 @@ namespace Provausio.Tower.Api.Data
             {
                 var original = _store[subscription.Topic];
 
+                /* 5.1 override existing pubs - no need to override; a new callback is a different sub */
+                // TODO: consider only allowing a subscriber to make one subscription to a topic?
                 if (original.Any(sub => sub.Callback == subscription.Callback))
                     return Task.CompletedTask;
 
-                var newValues = original;
+                var newValues = original.Clone();
                 newValues.Add(subscription);
                 
                 _store.TryUpdate(subscription.Topic, newValues, original);
@@ -52,12 +55,30 @@ namespace Provausio.Tower.Api.Data
 
         public Task Unsubscribe(Subscription subscription)
         {
-            throw new NotImplementedException();
+            if (!_store.ContainsKey(subscription.Topic))
+                return Task.CompletedTask;
+
+            var original = _store[subscription.Topic];
+            var newValues = original.Clone();
+            newValues.RemoveAll(sub => sub.Callback == subscription.Callback);
+
+            _store.TryUpdate(subscription.Topic, newValues, original);
+
+            return Task.CompletedTask;
         }
 
         public Task CreateEvent(SubscriberEvent subscriptionEvent)
         {
             throw new NotImplementedException();
+        }
+
+        private IList<T> CloneList<T>(IEnumerable<T> source) 
+        {
+            var sourceArray = source.ToArray();
+            var newArray = new T[sourceArray.Length];
+            sourceArray.CopyTo(newArray, 0);
+
+            return new List<T>(newArray);
         }
     }
 }

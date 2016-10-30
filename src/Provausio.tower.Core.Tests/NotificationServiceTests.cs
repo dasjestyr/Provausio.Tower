@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Net.Http;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Moq;
 using Provausio.Tower.Core;
@@ -17,6 +15,8 @@ namespace Provausio.tower.Core.Tests
         private readonly Mock<ICryptoFunctions> _generator;
         private readonly Mock<IPubSubHub> _hub;
         private readonly ConcurrentQueue<Publication> _testQueue;
+        private readonly Uri _hubLocation;
+        private Publication _testPublication;
 
         public NotificationServiceTests()
         {
@@ -27,6 +27,8 @@ namespace Provausio.tower.Core.Tests
             _testQueue = new ConcurrentQueue<Publication>();
             _queueMock = new Mock<IPublishQueue>();
             _queueMock.Setup(m => m.Enqueue(It.IsAny<Publication>()));
+            _hubLocation = new Uri("http://localhost:61616");
+            _testPublication = new Publication("http://test-topic.com", new StringContent("test string"), _hubLocation);
         }
 
         [Fact]
@@ -44,7 +46,7 @@ namespace Provausio.tower.Core.Tests
         public void Ctor_NullQueue_Throws()
         {
             // arrange
-            var hub = new Hub(_subStoreMock.Object, _generator.Object, _queueMock.Object);
+            var hub = new Hub(_hubLocation, _subStoreMock.Object, _generator.Object, _queueMock.Object);
 
             // act
 
@@ -68,8 +70,7 @@ namespace Provausio.tower.Core.Tests
             
             var service = new NotificationService(_hub.Object, _queueMock.Object);
 
-            var pub = new Publication("foo", new StringContent("test payload"));
-            _testQueue.Enqueue(pub);
+            _testQueue.Enqueue(_testPublication);
 
             // act
             service.Start();
@@ -101,8 +102,7 @@ namespace Provausio.tower.Core.Tests
             await Task.Delay(100);
             service.Stop();
 
-            var pub = new Publication("foo", new StringContent("test payload"));
-            _testQueue.Enqueue(pub);
+            _testQueue.Enqueue(_testPublication);
 
             await Task.Delay(100);
 
@@ -119,7 +119,7 @@ namespace Provausio.tower.Core.Tests
             var service = new NotificationService(_hub.Object, _queueMock.Object);
 
             // act
-            service.Enqueue(new Publication("foo", new StringContent("test payload")));
+            service.Enqueue(_testPublication);
 
             // assert
             _queueMock.Verify(m => m.Enqueue(It.IsAny<Publication>()), Times.Once);
@@ -133,7 +133,7 @@ namespace Provausio.tower.Core.Tests
             var service = new NotificationService(_hub.Object, _queueMock.Object);
 
             // act
-            service.Enqueue(new Publication("foo", new StringContent("test payload")));
+            service.Enqueue(_testPublication);
             var x = service.Dequeue();
 
             // assert

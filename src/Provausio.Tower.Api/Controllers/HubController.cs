@@ -23,10 +23,9 @@ namespace Provausio.Tower.Api.Controllers
             _hub = hub;
         }
 
-        [Route("subscribe"), HttpPost]
+        [Route(""), HttpPost]
         public async Task<HttpResponseMessage> Subscribe(FormDataCollection form)
         {
-            Trace.WriteLine("SERVER: Received subscription request...");
             if (form == null)
                 return Request.CreateResponse(HttpStatusCode.BadRequest, "no parameters were provided.");
 
@@ -49,17 +48,33 @@ namespace Provausio.Tower.Api.Controllers
 
             try
             {
-                var newSubscription = new Subscription(topic, new Uri(callback), secret);
-                var result = await _hub.Subscribe(newSubscription, token);
-                var response = result.SubscriptionSucceeded
-                    ? Request.CreateResponse(HttpStatusCode.Accepted)
-                    : Request.CreateResponse(HttpStatusCode.BadRequest, result.Reason);
+                if (mode == "subscribe")
+                {
+                    Trace.WriteLine("SERVER: Received UNSUBSCRIBE request...");
 
-                Trace.WriteLine(result.SubscriptionSucceeded
-                    ? "SERVER: Subscription suceeded!"
-                    : "SERVER: Client subscription failed!");
+                    var newSubscription = new Subscription(topic, new Uri(callback), secret);
+                    var result = await _hub.Subscribe(newSubscription, token);
+                    var response = result.SubscriptionSucceeded
+                        ? Request.CreateResponse(HttpStatusCode.Accepted)
+                        : Request.CreateResponse(HttpStatusCode.BadRequest, result.Reason);
 
-                return response;
+                    Trace.WriteLine(result.SubscriptionSucceeded
+                        ? "SERVER: Subscription suceeded!"
+                        : "SERVER: Client subscription failed!");
+
+                    return response;
+                }
+
+                if (mode == "unsubscribe")
+                {
+                    Trace.WriteLine("SERVER: Received UNSUBSCRIBE request...");
+
+                    // TODO: implement unsubscribe
+                    return Request.CreateResponse(HttpStatusCode.NotImplemented);
+                }
+
+                return Request.CreateResponse(HttpStatusCode.NotFound);
+
             }
             catch(Exception ex)
             {
@@ -73,7 +88,8 @@ namespace Provausio.Tower.Api.Controllers
             Trace.WriteLine("SERVER: Received a publication...");
 
             /* Section 7 */
-            if(!VerifyHeaders(Request.Headers))
+            Uri requestedHubLocation;
+            if(!VerifyHeaders(Request.Headers, out requestedHubLocation))
                 return Request.CreateResponse(HttpStatusCode.BadRequest, "missing required headers");
 
             var content = Request.Content;
@@ -82,71 +98,56 @@ namespace Provausio.Tower.Api.Controllers
 
             if (content == null)
                 return Request.CreateResponse(HttpStatusCode.BadRequest, "content");
-
+            
             /* Section 7 */
             // preserve the content that was published (don't modify or transform)
             
             var requestClone = await Request.Clone();
-            _hub.Publish(topic, requestClone.Content);
+            var publication = new Publication(topic, requestClone.Content, requestedHubLocation);
+
+            try
+            {
+                _hub.Publish(publication);
+            }
+            catch (RequestedHubMismatchException ex)
+            {
+                Trace.TraceError(ex.Message);
+                return Request.CreateResponse(HttpStatusCode.BadRequest);
+            }
 
             Trace.WriteLine("SERVER: Queued notifications. Subscribers will be notified shortly!");
             return Request.CreateResponse(HttpStatusCode.Accepted);
         }
 
-        private static bool VerifyHeaders(HttpHeaders headers)
+        private static bool VerifyHeaders(HttpHeaders headers, out Uri hubLocation)
         {
             IEnumerable<string> headerValues;
             if (!headers.TryGetValues("link", out headerValues))
+            {
+                hubLocation = null;
                 return false;
+            }
 
             var valueList = headerValues.ToList();
             var linkHeaders = new List<LinkHeader>();
             foreach(var value in valueList)
                 linkHeaders.AddRange(LinkHeader.Parse(value));
 
-            return linkHeaders.Any(header => header.Relationship.Equals("self")) &&
-                   linkHeaders.Any(header => header.Relationship.Equals("hub"));
-        }
-    }
-
-    public class LinkHeader
-    {
-        public Uri Link { get; private set; }
-
-        public string Relationship { get; private set; }
-
-        public static IEnumerable<LinkHeader> Parse(string headerValue)
-        {
-            var linkHeaders = new List<LinkHeader>();
-            var links = headerValue.Split(',');
-
-            foreach (var link in links)
+            if (HasRequiredHeaders(linkHeaders))
             {
-                var parts = link.Split(';');
-                if(parts.Length != 2)
-                    throw new FormatException("Link headers require 2 parts, a link and and a rel");
-
-                // validate relationship
-                var relPair = parts.Where(p => p.Trim().StartsWith("rel", StringComparison.OrdinalIgnoreCase)).ToArray();
-                if(relPair.Length != 1)
-                    throw new FormatException("Missing rel");
-
-                var relValue = relPair[0].Split('=');
-                if(relValue.Length != 2)
-                    throw new FormatException("Rel format is rel=value");
-
-                // validate link
-                var uriLink = parts.Where(p => p.Trim().Trim('<', '>', '/').StartsWith("http")).ToArray(); // should also account for https
-                if(uriLink.Length != 1)
-                    throw new FormatException("Link must be an http url");
-
-                var l = new Uri(uriLink[0].Trim().Trim('<', '>', '/'));
-                var r = relValue[1].Trim('\"');
-
-                linkHeaders.Add(new LinkHeader { Link = l, Relationship = r });
+                var hub = linkHeaders.First(h => h.Relationship.Equals("hub", StringComparison.OrdinalIgnoreCase));
+                hubLocation = hub.Link;
+                return true;
             }
 
-            return linkHeaders;
+            hubLocation = null;
+            return false;
+        }
+
+        private static bool HasRequiredHeaders(IReadOnlyCollection<LinkHeader> headers)
+        {
+            return headers.Any(header => header.Relationship.Equals("self")) &&
+                   headers.Any(header => header.Relationship.Equals("hub"));
         }
     }
 }

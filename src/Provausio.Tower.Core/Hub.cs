@@ -13,23 +13,26 @@ namespace Provausio.Tower.Core
         private const string ChallengeProperty = "hub.challenge";
         private const string TopicProperty = "hub.topic";
 
+        private readonly Uri _hubLocation;
         private readonly ISubscriptionStore _subscriptionStore;
         private readonly ICryptoFunctions _cryptoFunctions;
+        private readonly NotificationService _notificationService;
         private readonly HttpClient _httpClient;
 
         private bool _isDisposed;
-        private readonly NotificationService _notificationService;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Hub"/> class.
+        /// Initializes a new instance of the <see cref="Hub" /> class.
         /// </summary>
+        /// <param name="hubLocation">The hub address.</param>
         /// <param name="subscriptionStore">The subscription store.</param>
         /// <param name="cryptoFunctions">The challenge generator.</param>
-        /// <param name="queue"></param>
+        /// <param name="queue">The queue.</param>
         /// <param name="messageHandler">The message handler.</param>
         /// <exception cref="ArgumentNullException">
         /// </exception>
         public Hub(
+            Uri hubLocation,
             ISubscriptionStore subscriptionStore, 
             ICryptoFunctions cryptoFunctions, 
             IPublishQueue queue,
@@ -40,7 +43,8 @@ namespace Provausio.Tower.Core
 
             if(cryptoFunctions == null)
                 throw new ArgumentNullException(nameof(cryptoFunctions));
-            
+
+            _hubLocation = hubLocation;
             _subscriptionStore = subscriptionStore;
             _cryptoFunctions = cryptoFunctions;
             _notificationService = new NotificationService(this, queue ?? new InMemoryPublishQueue());
@@ -55,26 +59,30 @@ namespace Provausio.Tower.Core
         /// <summary>
         /// Initializes a new instance of the <see cref="Hub" /> class.
         /// </summary>
+        /// <param name="hubLocation">The hub address.</param>
         /// <param name="subscriptionStore">The subscription store.</param>
         /// <param name="cryptoFunctions">The challenge generator.</param>
         /// <param name="queue">The queue.</param>
         public Hub(
+            Uri hubLocation,
             ISubscriptionStore subscriptionStore, 
             ICryptoFunctions cryptoFunctions,
             IPublishQueue queue)
-            : this(subscriptionStore, cryptoFunctions, queue, null)
+            : this(hubLocation, subscriptionStore, cryptoFunctions, queue, null)
         {
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Hub"/> class.
+        /// Initializes a new instance of the <see cref="Hub" /> class.
         /// </summary>
+        /// <param name="hubLocation">The hub address.</param>
         /// <param name="subscriptionStore">The subscription store.</param>
         /// <param name="cryptoFunctions">The challenge generator.</param>
         public Hub(
+            Uri hubLocation,
             ISubscriptionStore subscriptionStore,
             ICryptoFunctions cryptoFunctions)
-            : this(subscriptionStore, cryptoFunctions, null, null)
+            : this(hubLocation, subscriptionStore, cryptoFunctions, null, null)
         {
         }
 
@@ -106,21 +114,16 @@ namespace Provausio.Tower.Core
         /// <summary>
         /// Queues a task that notifies all subscribers of an event
         /// </summary>
-        /// <param name="topic">The topic identifier.</param>
-        /// <param name="payload">The payload that will be sent to subscribers.</param>
-        /// <returns></returns>
+        /// <param name="publication">The publication.</param>
         /// <exception cref="ArgumentNullException">Can't notify a subscriber without any info!</exception>
-        public void Publish(string topic, HttpContent payload)
+        public void Publish(Publication publication)
         {
             CheckDispose();
 
-            if(string.IsNullOrEmpty(topic))
-                throw new ArgumentNullException(nameof(topic));
+            if(publication == null)
+                throw new ArgumentNullException(nameof(publication));
 
-            if(payload == null)
-                throw new ArgumentNullException(nameof(payload), "Can't notify a subscriber without any info!");
-
-            _notificationService.Enqueue(new Publication(topic, payload));
+            _notificationService.Enqueue(publication);
         }
 
         /// <summary>
@@ -131,20 +134,25 @@ namespace Provausio.Tower.Core
         public async Task PublishDirect(Publication publication)
         {
             CheckDispose();
+
+            if (publication.HubLocation != _hubLocation)
+                throw new RequestedHubMismatchException(string.Format(Strings.Error_HubLocationMismatch, _hubLocation, publication.HubLocation));
+
             var subscriptions = await _subscriptionStore.GetSubscriptions(publication.Topic);
             var subscriberList = subscriptions.ToList();
             if (!subscriberList.Any())
                 return;
-
-            var notifyTasks = subscriberList.Select(sub => Notify(sub, publication.Payload));
+            
+            var notifyTasks = subscriberList.Select(sub => Notify(publication, sub, publication.Payload));
 
             // TODO: notify if timeout
             await Task.WhenAll(notifyTasks);
         }
 
-        private async Task Notify(Subscription subscription, HttpContent content)
+        private async Task Notify(Publication publication, Subscription subscription, HttpContent content)
         {
             var request = new HttpRequestMessage(HttpMethod.Post, subscription.Callback) {Content = content};
+            request.Headers.Add("link", $"<{publication.HubLocation} />; rel=\"hub\", <{publication.Topic} />; rel=\"self\""); // required headers
 
             if (!string.IsNullOrEmpty(subscription.Secret))
             {
@@ -161,7 +169,7 @@ namespace Provausio.Tower.Core
             var response = await _httpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
-                var message = "The subscriber's endpoint did not return a success code.";
+                var message = Strings.Error_SubscriberPublishFailed;
                 if (response.Content != null)
                     message = $"{(int)response.StatusCode}:{await response.Content.ReadAsStringAsync()}";
 
@@ -283,4 +291,21 @@ namespace Provausio.Tower.Core
     }
 
     public delegate void PublishNotificationFailureHandler(object sender, PublishNotificationFailureEventArgs e);
+
+    public class InvalidHubRequestException : Exception
+    {
+        public InvalidHubRequestException(string message)
+            : base(message)
+        {
+        }
+    }
+
+    public class RequestedHubMismatchException : Exception
+    {
+        public RequestedHubMismatchException(string message)
+            : base(message)
+        {
+        }
+    }
+    
 }
